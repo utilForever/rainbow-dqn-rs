@@ -8,3 +8,4 @@ description = "A step-by-step tutorial from DQN to Rainbow using Rust and tch-rs
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tch = "0.7.2"
