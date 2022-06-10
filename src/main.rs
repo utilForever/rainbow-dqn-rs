@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use std::cmp;
-use tch::{kind::FLOAT_CPU, Tensor};
+use tch::nn::Module;
+use tch::{kind::FLOAT_CPU, nn, Tensor};
 
 struct ReplayBuffer {
     obs: Tensor,
@@ -72,6 +73,15 @@ impl ReplayBuffer {
     pub fn len(&self) -> usize {
         self.size as usize
     }
+}
+
+fn network(vs: &nn::Path, in_dim: i64, out_dim: i64) -> impl Module {
+    nn::seq()
+        .add(nn::linear(vs, in_dim, 128, Default::default()))
+        .add_fn(|xs| xs.relu())
+        .add(nn::linear(vs, 128, 128, Default::default()))
+        .add_fn(|xs| xs.relu())
+        .add(nn::linear(vs, 128, out_dim, Default::default()))
 }
 
 fn main() {
