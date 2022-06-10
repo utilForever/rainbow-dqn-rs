@@ -9,3 +9,4 @@ description = "A step-by-step tutorial from DQN to Rainbow using Rust and tch-rs
 
 [dependencies]
 tch = "0.7.2"
+rand = "0.8.5"
