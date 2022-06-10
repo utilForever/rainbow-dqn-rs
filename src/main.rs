@@ -1,4 +1,78 @@
-use tch::Tensor;
+use rand::seq::SliceRandom;
+use std::cmp;
+use tch::{kind::FLOAT_CPU, Tensor};
+
+struct ReplayBuffer {
+    obs: Tensor,
+    next_obs: Tensor,
+    actions: Tensor,
+    rewards: Tensor,
+    done: Tensor,
+    max_size: i64,
+    batch_size: i64,
+    ptr: i64,
+    size: i64,
+}
+
+impl ReplayBuffer {
+    fn new(obs_dim: i64, size: i64, batch_size: i64) -> Self {
+        Self {
+            obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
+            next_obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
+            actions: Tensor::zeros(&[size as _, 1], FLOAT_CPU),
+            rewards: Tensor::zeros(&[size as _, 1], FLOAT_CPU),
+            done: Tensor::zeros(&[size as _], FLOAT_CPU),
+            max_size: size,
+            batch_size,
+            ptr: 0,
+            size: 0,
+        }
+    }
+
+    pub fn store(
+        &mut self,
+        obs: Tensor,
+        next_obs: Tensor,
+        action: Tensor,
+        reward: Tensor,
+        done: Tensor,
+    ) {
+        self.obs.get(self.ptr).copy_(&obs);
+        self.next_obs.get(self.ptr).copy_(&next_obs);
+        self.actions.get(self.ptr).copy_(&action);
+        self.rewards.get(self.ptr).copy_(&reward);
+        self.done.get(self.ptr).copy_(&done);
+        self.ptr = (self.ptr + 1) % self.max_size;
+        self.size = cmp::min(self.size + 1, self.max_size);
+    }
+
+    pub fn sample_batch(&mut self) -> Vec<(Tensor, Tensor, Tensor, Tensor, Tensor)> {
+        let mut rng = &mut rand::thread_rng();
+        let sizes: Vec<i64> = (0..self.size).collect();
+
+        let idxs: Vec<i64> = sizes
+            .choose_multiple(&mut rng, self.batch_size as usize)
+            .cloned()
+            .collect();
+
+        let mut ret = Vec::with_capacity(self.batch_size as usize);
+        for idx in idxs {
+            ret.push((
+                self.obs.get(idx).copy(),
+                self.next_obs.get(idx).copy(),
+                self.actions.get(idx).copy(),
+                self.rewards.get(idx).copy(),
+                self.done.get(idx).copy(),
+            ));
+        }
+
+        ret
+    }
+
+    pub fn len(&self) -> usize {
+        self.size as usize
+    }
+}
 
 fn main() {
     let t = Tensor::of_slice(&[3, 1, 4, 1, 5]);
