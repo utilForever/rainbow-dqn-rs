@@ -2,6 +2,7 @@ mod gym_env;
 
 use gym_env::GymEnv;
 use rand::seq::SliceRandom;
+use rand::Rng;
 use std::cmp;
 use tch::nn::{Module, VarStore};
 use tch::{kind::FLOAT_CPU, nn, Tensor};
@@ -161,6 +162,23 @@ impl DQNAgent {
             transition: Transition::new(),
             is_test: false,
         }
+    }
+
+    pub fn select_action(&mut self, state: &Tensor) -> Tensor {
+        let mut rng = &mut rand::thread_rng();
+
+        let selected_action = if self.epsilon > rng.gen_range(0.0..1.0) {
+            rng.gen_range(0..self.env.action_space()).into()
+        } else {
+            self.dqn.as_mut().forward(state)
+        };
+
+        if !self.is_test {
+            self.transition.obs = Some(state.copy());
+            self.transition.action = Some(selected_action.copy());
+        }
+
+        selected_action
     }
 }
 
