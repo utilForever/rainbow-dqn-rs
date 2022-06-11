@@ -1,6 +1,6 @@
 mod gym_env;
 
-use gym_env::GymEnv;
+use gym_env::{GymEnv, Step};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::cmp;
@@ -179,6 +179,25 @@ impl DQNAgent {
         }
 
         selected_action
+    }
+
+    pub fn step(&mut self, action: &[f64]) -> (Tensor, f64, bool) {
+        let Step {
+            next_state,
+            reward,
+            is_done,
+            ..
+        } = self.env.step(&action).unwrap();
+
+        if !self.is_test {
+            self.transition.reward = Some(reward.into());
+            self.transition.next_obs = Some(next_state.copy());
+            self.transition.done = Some(is_done.into());
+
+            self.memory.store(&self.transition);
+        }
+
+        (next_state, reward, is_done)
     }
 }
 
