@@ -1,8 +1,9 @@
 mod gym_env;
 
+use gym_env::GymEnv;
 use rand::seq::SliceRandom;
 use std::cmp;
-use tch::nn::Module;
+use tch::nn::{Module, VarStore};
 use tch::{kind::FLOAT_CPU, nn, Tensor};
 
 struct ReplayBuffer {
@@ -105,6 +106,60 @@ impl Transition {
             action: None,
             reward: None,
             done: None,
+        }
+    }
+}
+
+struct DQNAgent {
+    env: GymEnv,
+    memory: ReplayBuffer,
+    batch_size: i64,
+    epsilon: f32,
+    epsilon_decay: f32,
+    max_epsilon: f32,
+    min_epsilon: f32,
+    target_update: i64,
+    gamma: f32,
+    var_store: VarStore,
+    dqn: Box<dyn Module>,
+    dqn_target: Box<dyn Module>,
+    transition: Transition,
+    is_test: bool,
+}
+
+impl DQNAgent {
+    pub fn new(
+        env: GymEnv,
+        memory_size: i64,
+        batch_size: i64,
+        target_update: i64,
+        epsilon_decay: f32,
+        max_epsilon: f32,
+        min_epsilon: f32,
+        gamma: f32,
+    ) -> Self {
+        let obs_dim = env.observation_space().iter().fold(1, |acc, x| acc * x);
+        let action_dim = env.action_space();
+
+        let var_store = VarStore::new(tch::Device::Cpu);
+        let dqn: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
+        let dqn_target: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
+
+        Self {
+            env,
+            memory: ReplayBuffer::new(obs_dim, memory_size, batch_size),
+            batch_size,
+            epsilon: max_epsilon,
+            epsilon_decay,
+            max_epsilon,
+            min_epsilon,
+            target_update,
+            gamma,
+            var_store,
+            dqn,
+            dqn_target,
+            transition: Transition::new(),
+            is_test: false,
         }
     }
 }
