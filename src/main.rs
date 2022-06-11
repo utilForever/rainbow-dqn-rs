@@ -86,6 +86,26 @@ fn network(vs: &nn::Path, in_dim: i64, out_dim: i64) -> impl Module {
         .add(nn::linear(vs, 128, out_dim, Default::default()))
 }
 
+struct Transition {
+    pub obs: Option<Tensor>,
+    pub next_obs: Option<Tensor>,
+    pub action: Option<Tensor>,
+    pub reward: Option<Tensor>,
+    pub done: Option<Tensor>,
+}
+
+impl Transition {
+    pub fn new() -> Self {
+        Self {
+            obs: None,
+            next_obs: None,
+            action: None,
+            reward: None,
+            done: None,
+        }
+    }
+}
+
 fn main() {
     let t = Tensor::of_slice(&[3, 1, 4, 1, 5]);
     let t = t * 2;
