@@ -32,19 +32,22 @@ impl ReplayBuffer {
         }
     }
 
-    pub fn store(
-        &mut self,
-        obs: Tensor,
-        next_obs: Tensor,
-        action: Tensor,
-        reward: Tensor,
-        done: Tensor,
-    ) {
-        self.obs.get(self.ptr).copy_(&obs);
-        self.next_obs.get(self.ptr).copy_(&next_obs);
-        self.actions.get(self.ptr).copy_(&action);
-        self.rewards.get(self.ptr).copy_(&reward);
-        self.done.get(self.ptr).copy_(&done);
+    pub fn store(&mut self, transition: &Transition) {
+        self.obs
+            .get(self.ptr)
+            .copy_(&transition.obs.as_ref().unwrap());
+        self.next_obs
+            .get(self.ptr)
+            .copy_(&transition.next_obs.as_ref().unwrap());
+        self.actions
+            .get(self.ptr)
+            .copy_(&transition.action.as_ref().unwrap());
+        self.rewards
+            .get(self.ptr)
+            .copy_(&transition.reward.as_ref().unwrap());
+        self.done
+            .get(self.ptr)
+            .copy_(&transition.done.as_ref().unwrap());
         self.ptr = (self.ptr + 1) % self.max_size;
         self.size = cmp::min(self.size + 1, self.max_size);
     }
