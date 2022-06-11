@@ -4,7 +4,7 @@ use gym_env::{GymEnv, Step};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::cmp;
-use tch::nn::{Module, VarStore};
+use tch::nn::{Module, Optimizer, OptimizerConfig, VarStore};
 use tch::{kind::FLOAT_CPU, nn, Tensor};
 
 struct ReplayBuffer {
@@ -125,6 +125,7 @@ struct DQNAgent {
     dqn: Box<dyn Module>,
     dqn_target: Box<dyn Module>,
     transition: Transition,
+    optimizer: Optimizer,
     is_test: bool,
 }
 
@@ -135,6 +136,7 @@ impl DQNAgent {
         batch_size: i64,
         target_update: i64,
         epsilon_decay: f32,
+        learning_rate: f64,
         max_epsilon: f32,
         min_epsilon: f32,
         gamma: f32,
@@ -145,6 +147,7 @@ impl DQNAgent {
         let var_store = VarStore::new(tch::Device::Cpu);
         let dqn: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
         let dqn_target: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
+        let optimizer = nn::Adam::default().build(&var_store, learning_rate).unwrap();
 
         Self {
             env,
@@ -160,6 +163,7 @@ impl DQNAgent {
             dqn,
             dqn_target,
             transition: Transition::new(),
+            optimizer,
             is_test: false,
         }
     }
