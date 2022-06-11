@@ -1,3 +1,5 @@
+mod gym_env;
+
 use rand::seq::SliceRandom;
 use std::cmp;
 use tch::nn::Module;
@@ -16,7 +18,7 @@ struct ReplayBuffer {
 }
 
 impl ReplayBuffer {
-    fn new(obs_dim: i64, size: i64, batch_size: i64) -> Self {
+    pub fn new(obs_dim: i64, size: i64, batch_size: i64) -> Self {
         Self {
             obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
             next_obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
