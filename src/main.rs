@@ -203,6 +203,21 @@ impl DQNAgent {
 
         (next_state, reward, is_done)
     }
+
+    pub fn update_model(&mut self) -> Tensor {
+        let samples = self.memory.sample_batch();
+        let loss = self.compute_dqn_loss(&samples);
+
+        self.optimizer.zero_grad();
+        loss.backward();
+        self.optimizer.step();
+
+        loss.get(0)
+    }
+
+    fn compute_dqn_loss(&mut self, samples: &Vec<(Tensor, Tensor, Tensor, Tensor, Tensor)>) -> Tensor {
+        Tensor::new()
+    }
 }
 
 fn main() {
