@@ -5,7 +5,7 @@ use ndarray::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::cmp;
-use tch::nn::{Module, Optimizer, OptimizerConfig, VarStore};
+use tch::nn::{Optimizer, OptimizerConfig, VarStore};
 use tch::{nn, Device, Reduction, Tensor};
 
 struct ReplayBuffer {
@@ -175,7 +175,6 @@ struct DQNAgent {
     min_epsilon: f32,
     target_update: i64,
     gamma: f32,
-    var_store: VarStore,
     dqn: Network,
     dqn_target: Network,
     transition: Transition,
@@ -213,7 +212,6 @@ impl DQNAgent {
             min_epsilon,
             target_update,
             gamma,
-            var_store,
             dqn: Network::new(obs_dim, action_dim),
             dqn_target: Network::new(obs_dim, action_dim),
             transition: Transition::new(),
@@ -223,9 +221,9 @@ impl DQNAgent {
     }
 
     pub fn select_action(&mut self, state: &Array1<f64>) -> Array1<f64> {
-        let mut rng = &mut rand::thread_rng();
+        let rng = &mut rand::thread_rng();
 
-        let mut selected_action: Array1<f64>;
+        let selected_action: Array1<f64>;
         if self.epsilon > rng.gen_range(0.0..1.0) {
             selected_action =
                 Array1::from_elem(1, rng.gen_range(0..self.env.action_space()) as f64);
