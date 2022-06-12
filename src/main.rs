@@ -119,13 +119,30 @@ impl ReplayBuffer {
     }
 }
 
-fn network(vs: &nn::Path, in_dim: i64, out_dim: i64) -> impl Module {
-    nn::seq()
-        .add(nn::linear(vs, in_dim, 128, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(nn::linear(vs, 128, 128, Default::default()))
-        .add_fn(|xs| xs.relu())
-        .add(nn::linear(vs, 128, out_dim, Default::default()))
+struct Network {
+    network: nn::Sequential,
+    device: Device,
+}
+
+impl Network {
+    fn new(in_dim: i64, out_dim: i64) -> Self {
+        let var_store = nn::VarStore::new(tch::Device::Cpu);
+        let path = &var_store.root();
+
+        Self {
+            network: nn::seq()
+                .add(nn::linear(path, in_dim, 128, Default::default()))
+                .add_fn(|xs| xs.relu())
+                .add(nn::linear(path, 128, 128, Default::default()))
+                .add_fn(|xs| xs.relu())
+                .add(nn::linear(path, 128, out_dim, Default::default())),
+            device: path.device(),
+        }
+    }
+
+    fn forward(&self, obs: &Tensor) -> Tensor {
+        obs.to_device(self.device).apply(&self.network)
+    }
 }
 
 struct Transition {
@@ -159,8 +176,8 @@ struct DQNAgent {
     target_update: i64,
     gamma: f32,
     var_store: VarStore,
-    dqn: Box<dyn Module>,
-    dqn_target: Box<dyn Module>,
+    dqn: Network,
+    dqn_target: Network,
     transition: Transition,
     optimizer: Optimizer,
     is_test: bool,
@@ -182,8 +199,6 @@ impl DQNAgent {
         let action_dim = env.action_space();
 
         let var_store = VarStore::new(tch::Device::Cpu);
-        let dqn: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
-        let dqn_target: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
         let optimizer = nn::Adam::default()
             .build(&var_store, learning_rate)
             .unwrap();
@@ -199,8 +214,8 @@ impl DQNAgent {
             target_update,
             gamma,
             var_store,
-            dqn,
-            dqn_target,
+            dqn: Network::new(obs_dim, action_dim),
+            dqn_target: Network::new(obs_dim, action_dim),
             transition: Transition::new(),
             optimizer,
             is_test: false,
@@ -215,10 +230,7 @@ impl DQNAgent {
             selected_action =
                 Array1::from_elem(1, rng.gen_range(0..self.env.action_space()) as f64);
         } else {
-            let val = self
-                .dqn
-                .as_mut()
-                .forward(&Tensor::try_from(state.clone()).unwrap());
+            let val = self.dqn.forward(&Tensor::try_from(state.clone()).unwrap());
             let arr: ArrayD<f64> = (&val).try_into().unwrap();
             selected_action = Array1::from_elem(1, arr.iter().copied().fold(f64::NAN, f64::max));
         };
@@ -286,8 +298,8 @@ impl DQNAgent {
         let reward = Tensor::try_from(samples.3.clone()).unwrap();
         let done = Tensor::try_from(samples.4.clone()).unwrap();
 
-        let curr_q_value = self.dqn.as_mut().forward(&state).gather(1, &action, false);
-        let next_q_value = self.dqn.as_mut().forward(&next_state).max_dim(1, true).0;
+        let curr_q_value = self.dqn.forward(&state).gather(1, &action, false);
+        let next_q_value = self.dqn_target.forward(&next_state).max_dim(1, true).0;
         let mask = 1 - done;
         let target = reward + self.gamma * next_q_value * mask;
 
