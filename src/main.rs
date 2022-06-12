@@ -6,7 +6,7 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use std::cmp;
 use tch::nn::{Module, Optimizer, OptimizerConfig, VarStore};
-use tch::{nn, Tensor};
+use tch::{nn, Device, Reduction, Tensor};
 
 struct ReplayBuffer {
     obs: Array2<f64>,
@@ -280,7 +280,20 @@ impl DQNAgent {
             Array1<f64>,
         ),
     ) -> Tensor {
-        Tensor::new()
+        let state = Tensor::try_from(samples.0.clone()).unwrap();
+        let next_state = Tensor::try_from(samples.1.clone()).unwrap();
+        let action = Tensor::try_from(samples.2.clone()).unwrap();
+        let reward = Tensor::try_from(samples.3.clone()).unwrap();
+        let done = Tensor::try_from(samples.4.clone()).unwrap();
+
+        let curr_q_value = self.dqn.as_mut().forward(&state).gather(1, &action, false);
+        let next_q_value = self.dqn.as_mut().forward(&next_state).max_dim(1, true).0;
+        let mask = 1 - done;
+        let target = reward + self.gamma * next_q_value * mask;
+
+        let loss = curr_q_value.smooth_l1_loss(&target, Reduction::None, 1.0);
+
+        loss
     }
 }
 
