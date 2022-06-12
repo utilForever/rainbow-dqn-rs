@@ -11,7 +11,7 @@ use tch::{nn, Device, Reduction, Tensor};
 struct ReplayBuffer {
     obs: Array2<f64>,
     next_obs: Array2<f64>,
-    actions: Array2<f64>,
+    actions: Array1<i64>,
     rewards: Array1<f64>,
     done: Array1<f64>,
     max_size: usize,
@@ -25,7 +25,7 @@ impl ReplayBuffer {
         Self {
             obs: Array2::<f64>::zeros((size, obs_dim).f()),
             next_obs: Array2::<f64>::zeros((size, obs_dim).f()),
-            actions: Array2::<f64>::zeros((size, obs_dim).f()),
+            actions: Array1::<i64>::zeros(size.f()),
             rewards: Array1::<f64>::zeros(size.f()),
             done: Array1::<f64>::zeros(size.f()),
             max_size: size,
@@ -39,7 +39,7 @@ impl ReplayBuffer {
         &mut self,
         obs: Array1<f64>,
         next_obs: Array1<f64>,
-        actions: Array1<f64>,
+        actions: i64,
         rewards: f64,
         done: bool,
     ) {
@@ -53,11 +53,7 @@ impl ReplayBuffer {
             .iter_mut()
             .enumerate()
             .for_each(|(idx, val)| *val = next_obs[idx]);
-        self.actions
-            .row_mut(self.ptr)
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, val)| *val = actions[idx]);
+        self.actions.iter_mut().for_each(|val| *val = actions);
         self.rewards.iter_mut().for_each(|val| *val = rewards);
         self.done
             .iter_mut()
@@ -71,7 +67,7 @@ impl ReplayBuffer {
     ) -> (
         Array2<f64>,
         Array2<f64>,
-        Array2<f64>,
+        Array1<i64>,
         Array1<f64>,
         Array1<f64>,
     ) {
@@ -86,7 +82,7 @@ impl ReplayBuffer {
         let shape = self.obs.shape();
         let mut obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
         let mut next_obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
-        let mut actions = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
+        let mut actions = Array1::<i64>::zeros(self.batch_size.f());
         let mut rewards = Array1::<f64>::zeros(self.batch_size.f());
         let mut done = Array1::<f64>::zeros(self.batch_size.f());
 
@@ -101,10 +97,8 @@ impl ReplayBuffer {
                 .enumerate()
                 .for_each(|(idx, val)| *val = self.next_obs[[idxs[i], idx]]);
             actions
-                .row_mut(i)
                 .iter_mut()
-                .enumerate()
-                .for_each(|(idx, val)| *val = self.actions[[idxs[i], idx]]);
+                .for_each(|val| *val = self.actions[idxs[i]]);
             rewards
                 .iter_mut()
                 .for_each(|val| *val = self.rewards[idxs[i]]);
@@ -148,7 +142,7 @@ impl Network {
 struct Transition {
     pub obs: Option<Array1<f64>>,
     pub next_obs: Option<Array1<f64>>,
-    pub action: Option<Array1<f64>>,
+    pub action: Option<i64>,
     pub reward: Option<f64>,
     pub done: Option<bool>,
 }
@@ -220,28 +214,27 @@ impl DQNAgent {
         }
     }
 
-    pub fn select_action(&mut self, state: &Array1<f64>) -> Array1<f64> {
+    pub fn select_action(&mut self, state: &Array1<f64>) -> i64 {
         let rng = &mut rand::thread_rng();
 
-        let selected_action: Array1<f64>;
+        let selected_action: i64;
         if self.epsilon > rng.gen_range(0.0..1.0) {
-            selected_action =
-                Array1::from_elem(1, rng.gen_range(0..self.env.action_space()) as f64);
+            selected_action = rng.gen_range(0..self.env.action_space());
         } else {
             let val = self.dqn.forward(&Tensor::try_from(state.clone()).unwrap());
-            let arr: ArrayD<f64> = (&val).try_into().unwrap();
-            selected_action = Array1::from_elem(1, arr.iter().copied().fold(f64::NAN, f64::max));
+            let arr: ArrayD<i64> = (&val).try_into().unwrap();
+            selected_action = *arr.iter().max().unwrap();
         };
 
         if !self.is_test {
             self.transition.obs = Some(state.clone());
-            self.transition.action = Some(selected_action.clone());
+            self.transition.action = Some(selected_action);
         }
 
         selected_action
     }
 
-    pub fn step(&mut self, action: &[f64]) -> (Array1<f64>, f64, bool) {
+    pub fn step(&mut self, action: &i64) -> (Array1<f64>, f64, bool) {
         let Step {
             next_state,
             reward,
@@ -294,7 +287,7 @@ impl DQNAgent {
             let converted_state: ArrayD<f64> = (&state).try_into().unwrap();
             let converted_state = Array1::from_elem(1, converted_state[0]);
             let action = self.select_action(&converted_state);
-            let (next_state, reward, done) = self.step(action.as_slice().unwrap());
+            let (next_state, reward, done) = self.step(&action);
 
             state = Tensor::try_from(next_state).unwrap();
             score += reward;
@@ -328,7 +321,7 @@ impl DQNAgent {
         samples: &(
             Array2<f64>,
             Array2<f64>,
-            Array2<f64>,
+            Array1<i64>,
             Array1<f64>,
             Array1<f64>,
         ),
@@ -353,7 +346,7 @@ impl DQNAgent {
 }
 
 fn main() {
-    let env = GymEnv::new("CartPole-v0").unwrap();
+    let env = GymEnv::new("CartPole-v1").unwrap();
     let mut dqn_agent = DQNAgent::new(env, 1000, 32, 100, 1.0 / 2000.0, 1e-4, 1.0, 0.1, 0.99);
     dqn_agent.train(10000);
 }
