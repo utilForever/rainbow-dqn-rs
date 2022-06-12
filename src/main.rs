@@ -282,6 +282,49 @@ impl DQNAgent {
         loss.get(0)
     }
 
+    pub fn train(&mut self, num_frames: i64) {
+        self.is_test = false;
+
+        let mut state = self.env.reset().unwrap();
+        let mut update_cnt = 0;
+        let mut epsilons = Vec::new();
+        let mut losses = Vec::new();
+        let mut scores = Vec::new();
+        let mut score = 0.0;
+
+        for _ in 1..=num_frames {
+            let converted_state: ArrayD<f64> = (&state).try_into().unwrap();
+            let converted_state = Array1::from_elem(1, converted_state[0]);
+            let action = self.select_action(&converted_state);
+            let (next_state, reward, done) = self.step(action.as_slice().unwrap());
+
+            state = Tensor::try_from(next_state).unwrap();
+            score += reward;
+
+            if done {
+                state = self.env.reset().unwrap();
+                scores.push(score);
+                score = 0.0;
+            }
+
+            if self.memory.len() >= self.batch_size {
+                let loss = self.update_model();
+                losses.push(loss);
+                update_cnt += 1;
+
+                self.epsilon = f32::max(
+                    self.min_epsilon,
+                    self.epsilon - (self.max_epsilon - self.min_epsilon) * self.epsilon_decay,
+                );
+                epsilons.push(self.epsilon);
+
+                if update_cnt % self.target_update == 0 {
+                    self.target_hard_update();
+                }
+            }
+        }
+    }
+
     fn compute_dqn_loss(
         &mut self,
         samples: &(
@@ -307,6 +350,8 @@ impl DQNAgent {
 
         loss
     }
+
+    fn target_hard_update(&mut self) {}
 }
 
 fn main() {
