@@ -9,5 +9,6 @@ description = "A step-by-step tutorial from DQN to Rainbow using Rust and tch-rs
 
 [dependencies]
 tch = "0.7.2"
+ndarray = "0.15.4"
 rand = "0.8.5"
 cpython = "0.7.0"
