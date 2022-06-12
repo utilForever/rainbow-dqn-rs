@@ -355,7 +355,7 @@ impl DQNAgent {
 }
 
 fn main() {
-    let t = Tensor::of_slice(&[3, 1, 4, 1, 5]);
-    let t = t * 2;
-    t.print();
+    let env = GymEnv::new("CartPole-v0").unwrap();
+    let mut dqn_agent = DQNAgent::new(env, 1000, 32, 100, 1.0 / 2000.0, 1e-4, 1.0, 0.1, 0.99);
+    dqn_agent.train(10000);
 }
