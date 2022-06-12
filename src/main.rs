@@ -1,32 +1,33 @@
 mod gym_env;
 
 use gym_env::{GymEnv, Step};
+use ndarray::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::cmp;
 use tch::nn::{Module, Optimizer, OptimizerConfig, VarStore};
-use tch::{kind::FLOAT_CPU, nn, Tensor};
+use tch::{nn, Tensor};
 
 struct ReplayBuffer {
-    obs: Tensor,
-    next_obs: Tensor,
-    actions: Tensor,
-    rewards: Tensor,
-    done: Tensor,
-    max_size: i64,
-    batch_size: i64,
-    ptr: i64,
-    size: i64,
+    obs: Array2<f64>,
+    next_obs: Array2<f64>,
+    actions: Array2<f64>,
+    rewards: Array1<f64>,
+    done: Array1<f64>,
+    max_size: usize,
+    batch_size: usize,
+    ptr: usize,
+    size: usize,
 }
 
 impl ReplayBuffer {
-    pub fn new(obs_dim: i64, size: i64, batch_size: i64) -> Self {
+    pub fn new(obs_dim: usize, size: usize, batch_size: usize) -> Self {
         Self {
-            obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
-            next_obs: Tensor::zeros(&[size as _, obs_dim as _], FLOAT_CPU),
-            actions: Tensor::zeros(&[size as _, 1], FLOAT_CPU),
-            rewards: Tensor::zeros(&[size as _, 1], FLOAT_CPU),
-            done: Tensor::zeros(&[size as _], FLOAT_CPU),
+            obs: Array2::<f64>::zeros((size, obs_dim).f()),
+            next_obs: Array2::<f64>::zeros((size, obs_dim).f()),
+            actions: Array2::<f64>::zeros((size, obs_dim).f()),
+            rewards: Array1::<f64>::zeros(size.f()),
+            done: Array1::<f64>::zeros(size.f()),
             max_size: size,
             batch_size,
             ptr: 0,
@@ -34,47 +35,83 @@ impl ReplayBuffer {
         }
     }
 
-    pub fn store(&mut self, transition: &Transition) {
+    pub fn store(
+        &mut self,
+        obs: Array1<f64>,
+        next_obs: Array1<f64>,
+        actions: Array1<f64>,
+        rewards: f64,
+        done: bool,
+    ) {
         self.obs
-            .get(self.ptr)
-            .copy_(&transition.obs.as_ref().unwrap());
+            .row_mut(self.ptr)
+            .iter_mut()
+            .enumerate()
+            .for_each(|(idx, val)| *val = obs[idx]);
         self.next_obs
-            .get(self.ptr)
-            .copy_(&transition.next_obs.as_ref().unwrap());
+            .row_mut(self.ptr)
+            .iter_mut()
+            .enumerate()
+            .for_each(|(idx, val)| *val = next_obs[idx]);
         self.actions
-            .get(self.ptr)
-            .copy_(&transition.action.as_ref().unwrap());
-        self.rewards
-            .get(self.ptr)
-            .copy_(&transition.reward.as_ref().unwrap());
+            .row_mut(self.ptr)
+            .iter_mut()
+            .enumerate()
+            .for_each(|(idx, val)| *val = actions[idx]);
+        self.rewards.iter_mut().for_each(|val| *val = rewards);
         self.done
-            .get(self.ptr)
-            .copy_(&transition.done.as_ref().unwrap());
+            .iter_mut()
+            .for_each(|val| *val = if done { 1.0 } else { 0.0 });
         self.ptr = (self.ptr + 1) % self.max_size;
         self.size = cmp::min(self.size + 1, self.max_size);
     }
 
-    pub fn sample_batch(&mut self) -> Vec<(Tensor, Tensor, Tensor, Tensor, Tensor)> {
+    pub fn sample_batch(
+        &mut self,
+    ) -> (
+        Array2<f64>,
+        Array2<f64>,
+        Array2<f64>,
+        Array1<f64>,
+        Array1<f64>,
+    ) {
         let mut rng = &mut rand::thread_rng();
-        let sizes: Vec<i64> = (0..self.size).collect();
+        let sizes: Vec<usize> = (0..self.size).collect();
 
-        let idxs: Vec<i64> = sizes
-            .choose_multiple(&mut rng, self.batch_size as usize)
+        let idxs: Vec<usize> = sizes
+            .choose_multiple(&mut rng, self.batch_size)
             .cloned()
             .collect();
 
-        let mut ret = Vec::with_capacity(self.batch_size as usize);
-        for idx in idxs {
-            ret.push((
-                self.obs.get(idx).copy(),
-                self.next_obs.get(idx).copy(),
-                self.actions.get(idx).copy(),
-                self.rewards.get(idx).copy(),
-                self.done.get(idx).copy(),
-            ));
+        let shape = self.obs.shape();
+        let mut obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
+        let mut next_obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
+        let mut actions = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
+        let mut rewards = Array1::<f64>::zeros(self.batch_size.f());
+        let mut done = Array1::<f64>::zeros(self.batch_size.f());
+
+        for i in 0..self.batch_size {
+            obs.row_mut(i)
+                .iter_mut()
+                .enumerate()
+                .for_each(|(idx, val)| *val = self.obs[[idxs[i], idx]]);
+            next_obs
+                .row_mut(i)
+                .iter_mut()
+                .enumerate()
+                .for_each(|(idx, val)| *val = self.next_obs[[idxs[i], idx]]);
+            actions
+                .row_mut(i)
+                .iter_mut()
+                .enumerate()
+                .for_each(|(idx, val)| *val = self.actions[[idxs[i], idx]]);
+            rewards
+                .iter_mut()
+                .for_each(|val| *val = self.rewards[idxs[i]]);
+            done.iter_mut().for_each(|val| *val = self.done[idxs[i]]);
         }
 
-        ret
+        (obs, next_obs, actions, rewards, done)
     }
 
     pub fn len(&self) -> usize {
@@ -92,11 +129,11 @@ fn network(vs: &nn::Path, in_dim: i64, out_dim: i64) -> impl Module {
 }
 
 struct Transition {
-    pub obs: Option<Tensor>,
-    pub next_obs: Option<Tensor>,
-    pub action: Option<Tensor>,
-    pub reward: Option<Tensor>,
-    pub done: Option<Tensor>,
+    pub obs: Option<Array1<f64>>,
+    pub next_obs: Option<Array1<f64>>,
+    pub action: Option<Array1<f64>>,
+    pub reward: Option<f64>,
+    pub done: Option<bool>,
 }
 
 impl Transition {
@@ -114,7 +151,7 @@ impl Transition {
 struct DQNAgent {
     env: GymEnv,
     memory: ReplayBuffer,
-    batch_size: i64,
+    batch_size: usize,
     epsilon: f32,
     epsilon_decay: f32,
     max_epsilon: f32,
@@ -132,8 +169,8 @@ struct DQNAgent {
 impl DQNAgent {
     pub fn new(
         env: GymEnv,
-        memory_size: i64,
-        batch_size: i64,
+        memory_size: usize,
+        batch_size: usize,
         target_update: i64,
         epsilon_decay: f32,
         learning_rate: f64,
@@ -147,11 +184,13 @@ impl DQNAgent {
         let var_store = VarStore::new(tch::Device::Cpu);
         let dqn: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
         let dqn_target: Box<dyn Module> = Box::new(network(&var_store.root(), obs_dim, action_dim));
-        let optimizer = nn::Adam::default().build(&var_store, learning_rate).unwrap();
+        let optimizer = nn::Adam::default()
+            .build(&var_store, learning_rate)
+            .unwrap();
 
         Self {
             env,
-            memory: ReplayBuffer::new(obs_dim, memory_size, batch_size),
+            memory: ReplayBuffer::new(obs_dim as usize, memory_size, batch_size),
             batch_size,
             epsilon: max_epsilon,
             epsilon_decay,
@@ -168,24 +207,31 @@ impl DQNAgent {
         }
     }
 
-    pub fn select_action(&mut self, state: &Tensor) -> Tensor {
+    pub fn select_action(&mut self, state: &Array1<f64>) -> Array1<f64> {
         let mut rng = &mut rand::thread_rng();
 
-        let selected_action = if self.epsilon > rng.gen_range(0.0..1.0) {
-            rng.gen_range(0..self.env.action_space()).into()
+        let mut selected_action: Array1<f64>;
+        if self.epsilon > rng.gen_range(0.0..1.0) {
+            selected_action =
+                Array1::from_elem(1, rng.gen_range(0..self.env.action_space()) as f64);
         } else {
-            self.dqn.as_mut().forward(state)
+            let val = self
+                .dqn
+                .as_mut()
+                .forward(&Tensor::try_from(state.clone()).unwrap());
+            let arr: ArrayD<f64> = (&val).try_into().unwrap();
+            selected_action = Array1::from_elem(1, arr.iter().copied().fold(f64::NAN, f64::max));
         };
 
         if !self.is_test {
-            self.transition.obs = Some(state.copy());
-            self.transition.action = Some(selected_action.copy());
+            self.transition.obs = Some(state.clone());
+            self.transition.action = Some(selected_action.clone());
         }
 
         selected_action
     }
 
-    pub fn step(&mut self, action: &[f64]) -> (Tensor, f64, bool) {
+    pub fn step(&mut self, action: &[f64]) -> (Array1<f64>, f64, bool) {
         let Step {
             next_state,
             reward,
@@ -193,12 +239,21 @@ impl DQNAgent {
             ..
         } = self.env.step(&action).unwrap();
 
-        if !self.is_test {
-            self.transition.reward = Some(reward.into());
-            self.transition.next_obs = Some(next_state.copy());
-            self.transition.done = Some(is_done.into());
+        let next_state: ArrayD<f64> = (&next_state).try_into().unwrap();
+        let next_state = Array1::from_elem(1, next_state[0]);
 
-            self.memory.store(&self.transition);
+        if !self.is_test {
+            self.transition.next_obs = Some(next_state.clone());
+            self.transition.reward = Some(reward);
+            self.transition.done = Some(is_done);
+
+            self.memory.store(
+                self.transition.obs.as_ref().unwrap().clone(),
+                self.transition.next_obs.as_ref().unwrap().clone(),
+                self.transition.action.as_ref().unwrap().clone(),
+                self.transition.reward.unwrap(),
+                self.transition.done.unwrap(),
+            );
         }
 
         (next_state, reward, is_done)
@@ -215,7 +270,16 @@ impl DQNAgent {
         loss.get(0)
     }
 
-    fn compute_dqn_loss(&mut self, samples: &Vec<(Tensor, Tensor, Tensor, Tensor, Tensor)>) -> Tensor {
+    fn compute_dqn_loss(
+        &mut self,
+        samples: &(
+            Array2<f64>,
+            Array2<f64>,
+            Array2<f64>,
+            Array1<f64>,
+            Array1<f64>,
+        ),
+    ) -> Tensor {
         Tensor::new()
     }
 }
