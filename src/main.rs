@@ -9,8 +9,8 @@ use tch::nn::{Optimizer, OptimizerConfig, VarStore};
 use tch::{nn, Device, Reduction, Tensor};
 
 struct ReplayBuffer {
-    obs: Array2<f64>,
-    next_obs: Array2<f64>,
+    obs: Array2<f32>,
+    next_obs: Array2<f32>,
     actions: Array1<i64>,
     rewards: Array1<f64>,
     done: Array1<f64>,
@@ -23,8 +23,8 @@ struct ReplayBuffer {
 impl ReplayBuffer {
     pub fn new(obs_dim: usize, size: usize, batch_size: usize) -> Self {
         Self {
-            obs: Array2::<f64>::zeros((size, obs_dim)),
-            next_obs: Array2::<f64>::zeros((size, obs_dim)),
+            obs: Array2::<f32>::zeros((size, obs_dim)),
+            next_obs: Array2::<f32>::zeros((size, obs_dim)),
             actions: Array1::<i64>::zeros(size),
             rewards: Array1::<f64>::zeros(size),
             done: Array1::<f64>::zeros(size),
@@ -37,8 +37,8 @@ impl ReplayBuffer {
 
     pub fn store(
         &mut self,
-        obs: Array1<f64>,
-        next_obs: Array1<f64>,
+        obs: Array1<f32>,
+        next_obs: Array1<f32>,
         actions: i64,
         rewards: f64,
         done: bool,
@@ -65,8 +65,8 @@ impl ReplayBuffer {
     pub fn sample_batch(
         &mut self,
     ) -> (
-        Array2<f64>,
-        Array2<f64>,
+        Array2<f32>,
+        Array2<f32>,
         Array1<i64>,
         Array1<f64>,
         Array1<f64>,
@@ -80,8 +80,8 @@ impl ReplayBuffer {
             .collect();
 
         let shape = self.obs.shape();
-        let mut obs = Array2::<f64>::zeros((self.batch_size, shape[1]));
-        let mut next_obs = Array2::<f64>::zeros((self.batch_size, shape[1]));
+        let mut obs = Array2::<f32>::zeros((self.batch_size, shape[1]));
+        let mut next_obs = Array2::<f32>::zeros((self.batch_size, shape[1]));
         let mut actions = Array1::<i64>::zeros(self.batch_size);
         let mut rewards = Array1::<f64>::zeros(self.batch_size);
         let mut done = Array1::<f64>::zeros(self.batch_size);
@@ -140,8 +140,8 @@ impl Network {
 }
 
 struct Transition {
-    pub obs: Option<Array1<f64>>,
-    pub next_obs: Option<Array1<f64>>,
+    pub obs: Option<Array1<f32>>,
+    pub next_obs: Option<Array1<f32>>,
     pub action: Option<i64>,
     pub reward: Option<f64>,
     pub done: Option<bool>,
@@ -214,7 +214,7 @@ impl DQNAgent {
         }
     }
 
-    pub fn select_action(&mut self, state: &Array1<f64>) -> i64 {
+    pub fn select_action(&mut self, state: &Array1<f32>) -> i64 {
         let rng = &mut rand::thread_rng();
 
         let selected_action: i64;
@@ -234,7 +234,7 @@ impl DQNAgent {
         selected_action
     }
 
-    pub fn step(&mut self, action: &i64) -> (Array1<f64>, f64, bool) {
+    pub fn step(&mut self, action: &i64) -> (Array1<f32>, f64, bool) {
         let Step {
             next_state,
             reward,
@@ -242,7 +242,7 @@ impl DQNAgent {
             ..
         } = self.env.step(&action).unwrap();
 
-        let next_state: ArrayD<f64> = (&next_state).try_into().unwrap();
+        let next_state: ArrayD<f32> = (&next_state).try_into().unwrap();
         let next_state = Array1::from_vec(Vec::from(next_state.as_slice().unwrap()));
 
         if !self.is_test {
@@ -284,7 +284,7 @@ impl DQNAgent {
         let mut score = 0.0;
 
         for i in 1..=num_frames {
-            let converted_state: ArrayD<f64> = (&state).try_into().unwrap();
+            let converted_state: ArrayD<f32> = (&state).try_into().unwrap();
             let converted_state = Array1::from_vec(Vec::from(converted_state.as_slice().unwrap()));
             let action = self.select_action(&converted_state);
             let (next_state, reward, done) = self.step(&action);
@@ -321,8 +321,8 @@ impl DQNAgent {
     fn compute_dqn_loss(
         &mut self,
         samples: &(
-            Array2<f64>,
-            Array2<f64>,
+            Array2<f32>,
+            Array2<f32>,
             Array1<i64>,
             Array1<f64>,
             Array1<f64>,
