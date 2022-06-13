@@ -23,11 +23,11 @@ struct ReplayBuffer {
 impl ReplayBuffer {
     pub fn new(obs_dim: usize, size: usize, batch_size: usize) -> Self {
         Self {
-            obs: Array2::<f64>::zeros((size, obs_dim).f()),
-            next_obs: Array2::<f64>::zeros((size, obs_dim).f()),
-            actions: Array1::<i64>::zeros(size.f()),
-            rewards: Array1::<f64>::zeros(size.f()),
-            done: Array1::<f64>::zeros(size.f()),
+            obs: Array2::<f64>::zeros((size, obs_dim)),
+            next_obs: Array2::<f64>::zeros((size, obs_dim)),
+            actions: Array1::<i64>::zeros(size),
+            rewards: Array1::<f64>::zeros(size),
+            done: Array1::<f64>::zeros(size),
             max_size: size,
             batch_size,
             ptr: 0,
@@ -80,11 +80,11 @@ impl ReplayBuffer {
             .collect();
 
         let shape = self.obs.shape();
-        let mut obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
-        let mut next_obs = Array2::<f64>::zeros((self.batch_size, shape[1]).f());
-        let mut actions = Array1::<i64>::zeros(self.batch_size.f());
-        let mut rewards = Array1::<f64>::zeros(self.batch_size.f());
-        let mut done = Array1::<f64>::zeros(self.batch_size.f());
+        let mut obs = Array2::<f64>::zeros((self.batch_size, shape[1]));
+        let mut next_obs = Array2::<f64>::zeros((self.batch_size, shape[1]));
+        let mut actions = Array1::<i64>::zeros(self.batch_size);
+        let mut rewards = Array1::<f64>::zeros(self.batch_size);
+        let mut done = Array1::<f64>::zeros(self.batch_size);
 
         for i in 0..self.batch_size {
             obs.row_mut(i)
