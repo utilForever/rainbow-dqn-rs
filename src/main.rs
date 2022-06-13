@@ -243,7 +243,7 @@ impl DQNAgent {
         } = self.env.step(&action).unwrap();
 
         let next_state: ArrayD<f64> = (&next_state).try_into().unwrap();
-        let next_state = Array1::from_elem(1, next_state[0]);
+        let next_state = Array1::from_vec(Vec::from(next_state.as_slice().unwrap()));
 
         if !self.is_test {
             self.transition.next_obs = Some(next_state.clone());
@@ -253,7 +253,7 @@ impl DQNAgent {
             self.memory.store(
                 self.transition.obs.as_ref().unwrap().clone(),
                 self.transition.next_obs.as_ref().unwrap().clone(),
-                self.transition.action.as_ref().unwrap().clone(),
+                self.transition.action.unwrap(),
                 self.transition.reward.unwrap(),
                 self.transition.done.unwrap(),
             );
@@ -283,9 +283,9 @@ impl DQNAgent {
         let mut scores = Vec::new();
         let mut score = 0.0;
 
-        for _ in 1..=num_frames {
+        for i in 1..=num_frames {
             let converted_state: ArrayD<f64> = (&state).try_into().unwrap();
-            let converted_state = Array1::from_elem(1, converted_state[0]);
+            let converted_state = Array1::from_vec(Vec::from(converted_state.as_slice().unwrap()));
             let action = self.select_action(&converted_state);
             let (next_state, reward, done) = self.step(&action);
 
@@ -297,6 +297,8 @@ impl DQNAgent {
                 scores.push(score);
                 score = 0.0;
             }
+
+            println!("frame {} with score of {}", i, score);
 
             if self.memory.len() >= self.batch_size {
                 let loss = self.update_model();
